@@ -1,5 +1,5 @@
 package com.yukihirai0505.crawler
 
-object Hello extends App {
+object Crawler extends App {
   println("Hello, world!")
 }
