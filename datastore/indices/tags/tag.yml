@@ -1,0 +1,14 @@
+tag:
+  properties:
+    tagName:
+      type: text
+      index: not_analyzed
+    mediaCount:
+      type: long
+      index: not_analyzed
+    isBan:
+      type: boolean
+      index: not_analyzed
+    timestamp:
+      type: date
+      format: dateOptionalTime

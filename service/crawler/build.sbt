@@ -21,6 +21,8 @@ libraryDependencies ++= {
     // Elasticsearch
     "org.apache.lucene" % "lucene-core" % "3.6.0",
     "com.sksamuel.elastic4s" %% "elastic4s-http" % "5.4.2",
+    // iService
+    "com.yukihirai0505" % "iservice_2.11" % "2.1.1",
     // Joda
     "joda-time" % "joda-time" % "2.9.3",
     "org.scalatest" %% "scalatest" % "2.2.4" % "test"
