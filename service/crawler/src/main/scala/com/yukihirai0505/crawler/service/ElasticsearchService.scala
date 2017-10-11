@@ -25,16 +25,16 @@ object ElasticsearchService extends ElasticsearchConstants with Config with Lazy
   private lazy val client = HttpClient(ElasticsearchClientUri(host, port))
 
   /**
-    * Elasticsearchから6時間以内のタグ情報を取得します
+    * Elasticsearchから3時間以内のタグ情報を取得します
     *
     * @param ec
     * @return
     */
   def searchTags(implicit ec: ExecutionContextExecutor): Future[Seq[InstagramDto[InstagramMediaDto]]] = {
-    val sixHoursAgo = DateUtil.toStrFormat(new DateTime().minusHours(3))
+    val threeHoursAgo = DateUtil.toStrFormat(new DateTime().minusHours(3))
     val result: Future[SearchResponse] = client.execute {
       search(Index.tags).scroll(KeepAlive.tags).size(searchSize)
-        .query(rangeQuery(FieldName.timestamp) gte sixHoursAgo)
+        .query(rangeQuery(FieldName.timestamp) gte threeHoursAgo)
         .query(boolQuery().must(termQuery(FieldName.isBan, false)))
         .sourceInclude(FieldName.tagName)
     }
@@ -63,16 +63,16 @@ object ElasticsearchService extends ElasticsearchConstants with Config with Lazy
   }
 
   /**
-    * Elasticsearchから6時間以内の投稿情報に紐づくタグを取得します
+    * Elasticsearchから3時間以内の投稿情報に紐づくタグを取得します
     *
     * @param ec
     * @return
     */
   def searchTagsFromPosts(implicit ec: ExecutionContextExecutor): Future[Seq[InstagramDto[InstagramMediaDto]]] = {
-    val sixHoursAgo = DateUtil.toStrFormat(new DateTime().minusHours(3))
+    val threeHoursAgo = DateUtil.toStrFormat(new DateTime().minusHours(3))
     val result: Future[SearchResponse] = client.execute {
       search(Index.posts).scroll(KeepAlive.postsForTags).size(searchSize)
-        .query(rangeQuery(FieldName.timestamp) gte sixHoursAgo).sourceInclude(FieldName.tagName)
+        .query(rangeQuery(FieldName.timestamp) gte threeHoursAgo).sourceInclude(FieldName.tagName)
     }
     result.flatMap { r =>
       val searchHits = r.hits.hits.toSeq
