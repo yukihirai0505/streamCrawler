@@ -6,7 +6,7 @@ import akka.stream.{ActorMaterializer, ClosedShape, ThrottleMode}
 import akka.{Done, NotUsed}
 import com.typesafe.scalalogging.LazyLogging
 import com.yukihirai0505.crawler.constants.Constants
-import com.yukihirai0505.crawler.model.{InstagramDto, InstagramMediaDataEntity, InstagramMediaDto}
+import com.yukihirai0505.crawler.model.{InstagramDto, InstagramHashTagEntity, InstagramMediaDataEntity, InstagramMediaDto}
 import com.yukihirai0505.crawler.service.ElasticsearchService
 import com.yukihirai0505.crawler.utils.DateUtil
 import com.yukihirai0505.iService.services.MediaService
@@ -18,7 +18,7 @@ import scala.concurrent.{ExecutionContextExecutor, Future}
   * Created by Yuky on 2017/10/10.
   */
 class CrawlerStreamService extends LazyLogging {
-  def postGraph = {
+  def postGraph: Future[Done] = {
     val name = "postGraph"
     implicit val system: ActorSystem = ActorSystem(name)
     implicit val ec: ExecutionContextExecutor = system.dispatcher
@@ -28,7 +28,7 @@ class CrawlerStreamService extends LazyLogging {
     def getPostFlow(s: Dto)(implicit ec: ExecutionContextExecutor) = {
       def extractHashTag(caption: String): Seq[String] = {
         val pattern = """#[a-zA-Z0-9_\u3041-\u3094\u3099-\u309C\u30A1-\u30FA\u3400-\uD7FF\uFF10-\uFF19\uFF20-\uFF3A\uFF41-\uFF5A\uFF66-\uFF9E|\w-ー]*""".r
-        pattern.findAllIn(caption).toSeq
+        pattern.findAllIn(caption).map(_.replace("#", "")).toSeq
       }
 
       def execute() = {
@@ -90,6 +90,47 @@ class CrawlerStreamService extends LazyLogging {
           val flowPosts = b.add(Flow[Dto].mapAsyncUnordered(3)(getPostFlow))
 
           source ~> throttle ~> flowPosts ~> sink
+          ClosedShape
+      })
+      commonGraph(graph, name)
+    }
+  }
+
+  def tagGraph: Future[Done] = {
+    val name = "tagGraph"
+    implicit val system: ActorSystem = ActorSystem(name)
+    implicit val ec: ExecutionContextExecutor = system.dispatcher
+    implicit val materializer: ActorMaterializer = ActorMaterializer()
+    type Dto = InstagramDto[InstagramMediaDto]
+
+    def getTagFlow(s: Dto)(implicit ec: ExecutionContextExecutor) = {
+      def execute() = {
+        MediaService.getPosts(s.dto.hashTag, List.empty).flatMap { tag =>
+          ElasticsearchService.saveTag(InstagramHashTagEntity(
+            tagName = s.dto.hashTag,
+            mediaCount = tag.media.count,
+            timestamp = DateUtil.getNowStr
+          )).flatMap(_ => Future successful s)
+        }
+      }
+
+      commonFlow(s, execute, "getTagFlow")
+    }
+
+    ElasticsearchService.searchTagsFromPosts.flatMap { tags =>
+      val source: Source[Dto, NotUsed] = Source(tags.to[scala.collection.immutable.Seq])
+      val sink = Sink.foreachParallel[Dto](3) { s =>
+        logger.info(s"-------------start $name sink")
+        Future successful s
+      }
+      val graph = RunnableGraph.fromGraph[Future[Done]](GraphDSL.create(sink) { implicit b =>
+        sink =>
+          import GraphDSL.Implicits._
+          val limit = 1000
+          val throttle = b.add(Flow[Dto].throttle(limit, 1.hour, 0, ThrottleMode.shaping))
+          val flowTags = b.add(Flow[Dto].mapAsyncUnordered(3)(getTagFlow))
+
+          source ~> throttle ~> flowTags ~> sink
           ClosedShape
       })
       commonGraph(graph, name)

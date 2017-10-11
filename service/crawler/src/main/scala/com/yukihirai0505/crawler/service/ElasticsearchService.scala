@@ -2,10 +2,11 @@ package com.yukihirai0505.crawler.service
 
 import com.sksamuel.elastic4s.http.ElasticDsl._
 import com.sksamuel.elastic4s.http.HttpClient
+import com.sksamuel.elastic4s.http.index.IndexResponse
 import com.sksamuel.elastic4s.http.search.{SearchHit, SearchResponse}
 import com.sksamuel.elastic4s.{ElasticsearchClientUri, IndexAndType}
 import com.typesafe.scalalogging.LazyLogging
-import com.yukihirai0505.crawler.model.{InstagramDto, InstagramMediaDataEntity, InstagramMediaDto}
+import com.yukihirai0505.crawler.model.{InstagramDto, InstagramHashTagEntity, InstagramMediaDataEntity, InstagramMediaDto}
 import com.yukihirai0505.crawler.utils.{CaseClassUtil, Config, DateUtil}
 import org.elasticsearch.action.support.WriteRequest.RefreshPolicy
 import org.joda.time.DateTime
@@ -101,12 +102,27 @@ object ElasticsearchService extends ElasticsearchConstants with Config with Lazy
     if (mediaDataEntities.nonEmpty) {
       val bulkData = mediaDataEntities.map { e =>
         indexInto(Index.posts)
-          .id(toIdFormat(e.mediaId, e.timestamp))
+          .id(e.mediaId)
           .fields(CaseClassUtil.getCCParams(e))
           .refresh(RefreshPolicy.WAIT_UNTIL)
       }
       client.execute(bulk(bulkData))
     } else Future successful()
+  }
+
+  /**
+    * Elasticsearchへタグ情報を保存します
+    *
+    * @param tagEntity
+    * @param ec
+    * @return
+    */
+  def saveTag(tagEntity: InstagramHashTagEntity)(implicit ec: ExecutionContextExecutor): Future[IndexResponse] = {
+    client.execute(
+      indexInto(Index.tags)
+        .id(tagEntity.tagName)
+        .fields(CaseClassUtil.getCCParams(tagEntity))
+    )
   }
 
   /**
@@ -132,9 +148,6 @@ object ElasticsearchService extends ElasticsearchConstants with Config with Lazy
     }
   }
 
-  private def toIdFormat(id: String, timestamp: String) = {
-    s"${id}_${timestamp.dropRight(12).replace(" ", "_")}"
-  }
 }
 
 trait ElasticsearchConstants {

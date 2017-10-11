@@ -1,5 +1,12 @@
 package com.yukihirai0505.crawler.model
 
+case class InstagramHashTagEntity(
+                                   tagName: String,
+                                   mediaCount: Long = 0,
+                                   isBan: Boolean = false,
+                                   timestamp: String = ""
+                                 )
+
 case class InstagramMediaDataEntity(
                                      mediaId: String,
                                      userId: String,
@@ -17,4 +24,7 @@ case class InstagramMediaDto(
                               instagramMedia: Seq[InstagramMediaDataEntity] = Seq.empty
                             )
 
-case class InstagramDto[T](dto: T, exception: Option[Exception] = None)
+case class InstagramDto[T](
+                            dto: T,
+                            exception: Option[Exception] = None
+                          )

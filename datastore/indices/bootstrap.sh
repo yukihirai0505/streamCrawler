@@ -51,6 +51,6 @@ NOW=$(date '+%Y-%m-%dT%H:%M:%S+09:00')
 echo $NOW
 
 # 6. 初期データの作成
-curl -H "Content-Type: application/json" --request POST 'localhost:9200/tags/tag/%E3%82%B3%E3%82%B9%E3%83%A1' -d '{"tagName":"ファッション", "timestamp": "'${NOW}'"}'
+curl -H "Content-Type: application/json" --request POST 'localhost:9200/tags/tag/%E3%83%95%E3%82%A1%E3%83%83%E3%82%B7%E3%83%A7%E3%83%B3' -d '{"tagName":"ファッション", "timestamp": "'${NOW}'"}'
 
 echo "\n初期データを作成しました。\n"
