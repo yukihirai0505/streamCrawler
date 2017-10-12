@@ -15,53 +15,63 @@ trait InstagramService extends LazyLogging {
       pattern.findAllIn(caption).map(_.replace("#", "")).toSeq
     }
 
-    MediaService.getPosts(source.dto.hashTag, List.empty).flatMap { tag =>
-      val nodes = tag.media.nodes.map { n =>
-        val caption = n.caption.getOrElse("")
-        InstagramMediaDataEntity(
-          mediaId = n.id,
-          userId = n.owner.id,
-          createdTime = DateUtil.getDateStrFromTimestamp(n.date),
-          link = Constants.instagramPostUrl(n.code),
-          tagName = extractHashTag(caption),
-          likes = n.likes.count,
-          comments = n.comments.count,
-          caption = caption,
-          timestamp = DateUtil.getNowStr
-        )
-      }
-      if (tag.media.pageInfo.hasNextPage) {
-        MediaService.getPostsPaging(source.dto.hashTag, tag.media.pageInfo.endCursor).flatMap {
-          case Right(posts) => Future successful posts.data.hashtag.edgeHashtagToMedia.edges.map { n =>
-            val caption = n.node.edgeMediaToCaption.edges.headOption.map(_.node.text).getOrElse("")
-            InstagramMediaDataEntity(
-              mediaId = n.node.id,
-              userId = n.node.owner.id,
-              createdTime = DateUtil.getDateStrFromTimestamp(n.node.takenAtTimestamp),
-              link = Constants.instagramPostUrl(n.node.shortcode),
-              tagName = extractHashTag(caption),
-              likes = n.node.edgeLikedBy.count,
-              comments = n.node.edgeMediaToComment.count,
-              caption = caption,
-              timestamp = DateUtil.getNowStr
-            )
-          } ++ nodes
-          case Left(e) =>
-            logger.warn("getPosts", e)
-            Future successful nodes
+    MediaService.getPosts(source.dto.hashTag, List.empty).flatMap {
+      case Right(tag) =>
+        val nodes = tag.media.nodes.map { n =>
+          val caption = n.caption.getOrElse("")
+          InstagramMediaDataEntity(
+            mediaId = n.id,
+            userId = n.owner.id,
+            createdTime = DateUtil.getDateStrFromTimestamp(n.date),
+            link = Constants.instagramPostUrl(n.code),
+            tagName = extractHashTag(caption),
+            likes = n.likes.count,
+            comments = n.comments.count,
+            caption = caption,
+            timestamp = DateUtil.getNowStr
+          )
         }
-      } else Future successful nodes
+        if (tag.media.pageInfo.hasNextPage) {
+          MediaService.getPostsPaging(source.dto.hashTag, tag.media.pageInfo.endCursor).flatMap {
+            case Right(posts) => Future successful posts.data.hashtag.edgeHashtagToMedia.edges.map { n =>
+              val caption = n.node.edgeMediaToCaption.edges.headOption.map(_.node.text).getOrElse("")
+              InstagramMediaDataEntity(
+                mediaId = n.node.id,
+                userId = n.node.owner.id,
+                createdTime = DateUtil.getDateStrFromTimestamp(n.node.takenAtTimestamp),
+                link = Constants.instagramPostUrl(n.node.shortcode),
+                tagName = extractHashTag(caption),
+                likes = n.node.edgeLikedBy.count,
+                comments = n.node.edgeMediaToComment.count,
+                caption = caption,
+                timestamp = DateUtil.getNowStr
+              )
+            } ++ nodes
+            case Left(e) =>
+              logger.warn("getPosts", e)
+              Future successful nodes
+          }
+        } else Future successful nodes
+      case Left(e) =>
+        logger.warn("getPosts", e.message)
+        Future successful Seq.empty
     }
   }
 
-  def getTag(source: InstagramDto[InstagramMediaDto])(implicit ec: ExecutionContextExecutor): Future[InstagramHashTagEntity] = {
-    // TODO: Update iService library and if the tag is baned, isBan equal true
-    MediaService.getPosts(source.dto.hashTag, List.empty).flatMap { tag =>
-      Future successful InstagramHashTagEntity(
-        tagName = source.dto.hashTag,
-        mediaCount = tag.media.count,
-        timestamp = DateUtil.getNowStr
-      )
+  def getTag(source: InstagramDto[InstagramMediaDto])(implicit ec: ExecutionContextExecutor): Future[Either[Throwable, InstagramHashTagEntity]] = {
+    MediaService.getPosts(source.dto.hashTag, List.empty).flatMap {
+      case Right(tag) =>
+        Future successful Right(InstagramHashTagEntity(
+          tagName = source.dto.hashTag,
+          mediaCount = tag.media.count,
+          timestamp = DateUtil.getNowStr
+        ))
+      case Left(e) =>
+        if (e.message.contains("is baned by instagram")) Future successful Right(InstagramHashTagEntity(
+          tagName = source.dto.hashTag,
+          isBan = true
+        ))
+        else Future successful Left(new Exception(e.message))
     }
   }
 

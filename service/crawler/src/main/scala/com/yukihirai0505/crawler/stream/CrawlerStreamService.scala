@@ -62,8 +62,12 @@ class CrawlerStreamService extends InstagramService {
 
     def getTagFlow(source: Dto)(implicit ec: ExecutionContextExecutor) = {
       def execute() = {
-        getTag(source).flatMap { tag =>
-          ElasticsearchService.saveTag(tag).flatMap(_ => Future successful source)
+        getTag(source).flatMap {
+          case Right(tag) =>
+            ElasticsearchService.saveTag(tag).flatMap(_ => Future successful source)
+          case Left(e) =>
+            logger.warn("getTagFlow", e)
+            Future successful source
         }
       }
 
