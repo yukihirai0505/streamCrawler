@@ -18,7 +18,7 @@ def deploy():
     env.archive = "%(timestamp)s.tar.gz" % {"timestamp":timestamp}
     with lcd(env.project_root):
          local("/usr/local/bin/sbt clean assembly")
-         local("tar cvfz %(archive)s api-standalone.jar" % {"archive": env.archive})
+         local("tar cvfz %(archive)s standalone.jar" % {"archive": env.archive})
          put("%(archive)s" % {"archive":env.archive}, "%(dir)s" % {"dir" : env.server_dir})
          local("rm %(archive)s" % {"archive": env.archive})
     run("sudo rm -Rf %(dir)s/standalone.jar" % {"dir" : env.server_dir})
