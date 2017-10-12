@@ -2,6 +2,7 @@
 
 .envrc
 datastore/elasticsearch-5.6.1/data
+deploy/fabfile/streamCrawler.py
 
 ### https://raw.github.com/github/gitignore/7792e50daeaa6c07460484704671d1dc9f0045a7/Global/jetbrains.gitignore
 
