@@ -5,12 +5,6 @@ version := "1.0"
 
 scalaVersion := "2.11.7"
 
-// to avoid java.lang.RuntimeException: deduplicate: different file contents found in the following: logback.xml
-// ref: https://stackoverflow.com/questions/25144484/sbt-assembly-deduplication-found-error
-assemblyMergeStrategy in assembly := {
-  case PathList("META-INF", xs @ _*) => MergeStrategy.discard
-  case x => MergeStrategy.first
-}
 assemblyOutputPath in assembly := file("./standalone.jar")
 
 libraryDependencies ++= {
