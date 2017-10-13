@@ -23,4 +23,4 @@ def deploy():
          local("rm %(archive)s" % {"archive": env.archive})
     run("sudo rm -Rf %(dir)s/standalone.jar" % {"dir" : env.server_dir})
     run("tar zxvf %(dir)s/%(archive)s -C %(dir)s" % {"dir" : env.server_dir, "archive": env.archive})
-    put("datastore/indices", "%(dir)s" % {"dir" : env.server_dir})
+    put("../datastore/indices", "%(dir)s" % {"dir" : env.server_dir})
