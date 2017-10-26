@@ -1,7 +1,7 @@
 package com.yukihirai0505.crawler.stream
 
 import akka.actor.ActorSystem
-import akka.stream.scaladsl.{Flow, GraphDSL, RunnableGraph, Sink, Source}
+import akka.stream.scaladsl.{Broadcast, Flow, GraphDSL, MergePreferred, RunnableGraph, Sink, Source}
 import akka.stream.{ActorMaterializer, ClosedShape, ThrottleMode}
 import akka.{Done, NotUsed}
 import com.yukihirai0505.crawler.model.{InstagramDto, InstagramMediaDto}
@@ -14,14 +14,15 @@ import scala.concurrent.{ExecutionContextExecutor, Future}
   * Created by Yuky on 2017/10/10.
   */
 class CrawlerStreamService extends InstagramService {
+  val limit = 1000
+
   def postGraph: Future[Done] = {
     val name = "postGraph"
     implicit val system: ActorSystem = ActorSystem(name)
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     implicit val materializer: ActorMaterializer = ActorMaterializer()
-    type Dto = InstagramDto[InstagramMediaDto]
 
-    def getPostFlow(source: Dto)(implicit ec: ExecutionContextExecutor) = {
+    def getPostFlow(source: MediaDto)(implicit ec: ExecutionContextExecutor) = {
       def execute() = {
         getPosts(source).flatMap { r =>
           ElasticsearchService.savePosts(r).flatMap(_ =>
@@ -34,17 +35,16 @@ class CrawlerStreamService extends InstagramService {
     }
 
     ElasticsearchService.searchTags.flatMap { tags =>
-      val source: Source[Dto, NotUsed] = Source(tags.to[scala.collection.immutable.Seq])
-      val sink = Sink.foreachParallel[Dto](3) { s =>
+      val source: Source[MediaDto, NotUsed] = Source(tags.to[scala.collection.immutable.Seq])
+      val sink = Sink.foreachParallel[MediaDto](3) { s =>
         logger.info(s"-------------start $name sink")
         Future successful s
       }
       val graph = RunnableGraph.fromGraph[Future[Done]](GraphDSL.create(sink) { implicit b =>
         sink =>
           import GraphDSL.Implicits._
-          val limit = 1000
-          val throttle = b.add(Flow[Dto].throttle(limit, 1.hour, 0, ThrottleMode.shaping))
-          val flowPosts = b.add(Flow[Dto].mapAsyncUnordered(3)(getPostFlow))
+          val throttle = b.add(Flow[MediaDto].throttle(limit, 1.hour, 0, ThrottleMode.shaping))
+          val flowPosts = b.add(Flow[MediaDto].mapAsyncUnordered(3)(getPostFlow))
 
           source ~> throttle ~> flowPosts ~> sink
           ClosedShape
@@ -53,14 +53,13 @@ class CrawlerStreamService extends InstagramService {
     }
   }
 
-  def tagGraph: Future[Done] = {
-    val name = "tagGraph"
+  def postTagGraph: Future[Done] = {
+    val name = "postTagGraph"
     implicit val system: ActorSystem = ActorSystem(name)
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     implicit val materializer: ActorMaterializer = ActorMaterializer()
-    type Dto = InstagramDto[InstagramMediaDto]
 
-    def getTagFlow(source: Dto)(implicit ec: ExecutionContextExecutor) = {
+    def getTagFlow(source: MediaDto)(implicit ec: ExecutionContextExecutor) = {
       def execute() = {
         getTag(source).flatMap {
           case Right(tag) =>
@@ -75,23 +74,64 @@ class CrawlerStreamService extends InstagramService {
     }
 
     ElasticsearchService.searchTagsFromPosts.flatMap { tags =>
-      val source: Source[Dto, NotUsed] = Source(tags.to[scala.collection.immutable.Seq])
-      val sink = Sink.foreachParallel[Dto](3) { s =>
-        logger.info(s"-------------start $name sink")
+      val source: Source[MediaDto, NotUsed] = Source(tags.to[scala.collection.immutable.Seq])
+      val sink = Sink.foreachParallel[MediaDto](3) { s =>
+        logger.info(s"-------------start $name sink => hashtag: ${s.dto.hashTag}")
         Future successful s
       }
       val graph = RunnableGraph.fromGraph[Future[Done]](GraphDSL.create(sink) { implicit b =>
         sink =>
           import GraphDSL.Implicits._
-          val limit = 1000
-          val throttle = b.add(Flow[Dto].throttle(limit, 1.hour, 0, ThrottleMode.shaping))
-          val flowTags = b.add(Flow[Dto].mapAsyncUnordered(3)(getTagFlow))
+          val throttle = b.add(Flow[MediaDto].throttle(limit, 1.hour, 0, ThrottleMode.shaping))
+          val flowTags = b.add(Flow[MediaDto].mapAsyncUnordered(3)(getTagFlow))
 
           source ~> throttle ~> flowTags ~> sink
           ClosedShape
       })
       commonGraph(graph, name)
     }
+  }
+
+  def tagPostGraph(tagName: String): Future[Done] = {
+    val name = "tagPostGraph"
+    implicit val system: ActorSystem = ActorSystem(name)
+    implicit val ec: ExecutionContextExecutor = system.dispatcher
+    implicit val materializer: ActorMaterializer = ActorMaterializer()
+
+    def getPostPagingFlow(s: MediaDto)(implicit ec: ExecutionContextExecutor) = {
+      def execute() = {
+        getPostsPaging(s).flatMap { result =>
+          ElasticsearchService.savePosts(result.dto.instagramMedia).flatMap(_ => Future successful result)
+        }
+      }
+
+      commonFlow(s, execute, "getPostPagingFlow")
+    }
+
+    val source: Source[MediaDto, NotUsed] = Source.single(
+      InstagramDto(
+        dto = InstagramMediaDto(
+          hashTag = tagName
+        )
+      ))
+    val sink = Sink.foreachParallel[MediaDto](3) { s =>
+      logger.info(s"-------------start $name sink")
+      Future successful s
+    }
+    val graph = RunnableGraph.fromGraph[Future[Done]](GraphDSL.create(sink) { implicit b =>
+      sink =>
+        import GraphDSL.Implicits._
+        val throttle = b.add(Flow[MediaDto].throttle(limit, 1.hour, 1, ThrottleMode.shaping))
+        val flowPosts = b.add(Flow[MediaDto].mapAsyncUnordered(3)(getPostPagingFlow))
+        val merge = b.add(MergePreferred[MediaDto](1))
+        val bcast = b.add(Broadcast[MediaDto](2))
+        val loopFilter = b.add(Flow[MediaDto].filter(x => x.dto.pageInfo.exists(_.hasNextPage)))
+
+        source ~> merge ~> throttle ~> flowPosts ~> bcast ~> sink
+        merge.preferred <~ loopFilter <~ bcast
+        ClosedShape
+    })
+    commonGraph(graph, name)
   }
 
   private def commonFlow[T](s: InstagramDto[T], execute: () => Future[InstagramDto[T]], name: String)

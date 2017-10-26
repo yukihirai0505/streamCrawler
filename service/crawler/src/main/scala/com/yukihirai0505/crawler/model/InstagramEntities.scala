@@ -1,5 +1,7 @@
 package com.yukihirai0505.crawler.model
 
+import com.yukihirai0505.iService.responses.PageInfo
+
 case class InstagramHashTagEntity(
                                    tagName: String,
                                    mediaCount: Long = 0,
@@ -21,7 +23,8 @@ case class InstagramMediaDataEntity(
 
 case class InstagramMediaDto(
                               hashTag: String,
-                              instagramMedia: Seq[InstagramMediaDataEntity] = Seq.empty
+                              instagramMedia: Seq[InstagramMediaDataEntity] = Seq.empty,
+                              pageInfo: Option[PageInfo] = None
                             )
 
 case class InstagramDto[T](
